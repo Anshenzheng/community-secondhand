@@ -208,15 +208,6 @@ function PublishItem({ user }) {
 
           <Form.Item
             label="商品图片"
-            name="images"
-            valuePropName="fileList"
-            getValueFromEvent={(e) => {
-              if (Array.isArray(e)) {
-                return e;
-              }
-              return e?.fileList;
-            }}
-            rules={[{ required: true, message: '请至少上传一张商品图片!' }]}
           >
             <Upload
               listType="picture-card"
