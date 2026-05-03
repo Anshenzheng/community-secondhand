@@ -95,15 +95,7 @@ function AdminRoutes() {
     return <Navigate to="/admin/login" replace />;
   }
 
-  return (
-    <Routes>
-      <Route path="dashboard" element={<AdminDashboard />} />
-      <Route path="categories" element={<AdminCategories />} />
-      <Route path="items" element={<AdminItems />} />
-      <Route path="users" element={<AdminUsers />} />
-      <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
-    </Routes>
-  );
+  return <AdminDashboard />;
 }
 
 function MainRoutes({ user, onLogin }) {

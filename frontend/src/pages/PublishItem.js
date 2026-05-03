@@ -8,28 +8,18 @@ const { Content } = Layout;
 const { TextArea } = Input;
 const { Option } = Select;
 
-function getBase64(img, callback) {
-  const reader = new FileReader();
-  reader.addEventListener('load', () => callback(reader.result));
-  reader.readAsDataURL(img);
-}
-
-function beforeUpload(file) {
-  const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/gif';
-  if (!isJpgOrPng) {
-    message.error('只能上传 JPG、PNG 或 GIF 格式的图片!');
-  }
-  const isLt2M = file.size / 1024 / 1024 < 16;
-  if (!isLt2M) {
-    message.error('图片大小不能超过 16MB!');
-  }
-  return isJpgOrPng && isLt2M;
+function getBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+  });
 }
 
 function PublishItem({ user }) {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [imageLoading, setImageLoading] = useState(false);
   const [fileList, setFileList] = useState([]);
   const navigate = useNavigate();
   const [form] = Form.useForm();
@@ -47,19 +37,66 @@ function PublishItem({ user }) {
     }
   };
 
-  const handleImageChange = (info) => {
-    if (info.file.status === 'uploading') {
-      setImageLoading(true);
-      return;
-    }
+  const handleUploadChange = async (info) => {
+    let newFileList = [...info.fileList];
+
+    newFileList = newFileList.slice(-5);
+
+    newFileList = newFileList.map(file => {
+      if (file.response) {
+        file.url = file.response.url;
+      }
+      return file;
+    });
+
     if (info.file.status === 'done') {
-      getBase64(info.file.originFileObj, () => {
-        setImageLoading(false);
+      message.success(`${info.file.name} 上传成功`);
+    } else if (info.file.status === 'error') {
+      message.error(`${info.file.name} 上传失败`);
+    }
+
+    setFileList(newFileList);
+  };
+
+  const customUpload = async (options) => {
+    const { onSuccess, onError, file } = options;
+    
+    try {
+      const base64 = await getBase64(file);
+      
+      const updatedFile = {
+        ...file,
+        thumbUrl: base64,
+        url: base64,
+        status: 'done',
+        originFileObj: file
+      };
+      
+      onSuccess('ok');
+      
+      setFileList(prev => {
+        const newList = [...prev];
+        const index = newList.findIndex(f => f.uid === file.uid);
+        if (index !== -1) {
+          newList[index] = { ...newList[index], ...updatedFile };
+        } else {
+          newList.push(updatedFile);
+        }
+        return newList.slice(-5);
       });
+      
+    } catch (error) {
+      onError(error);
+      message.error('图片处理失败');
     }
   };
 
   const onFinish = async (values) => {
+    if (fileList.length === 0) {
+      message.error('请至少上传一张商品图片!');
+      return;
+    }
+
     setLoading(true);
     try {
       const formData = new FormData();
@@ -68,8 +105,10 @@ function PublishItem({ user }) {
       formData.append('price', values.price);
       formData.append('category_id', values.category_id);
 
-      fileList.forEach((file, index) => {
-        formData.append('images', file.originFileObj);
+      fileList.forEach((file) => {
+        if (file.originFileObj) {
+          formData.append('images', file.originFileObj);
+        }
       });
 
       const response = await axios.post('/api/items', formData, {
@@ -90,8 +129,8 @@ function PublishItem({ user }) {
 
   const uploadButton = (
     <div>
-      {imageLoading ? <LoadingOutlined /> : <PlusOutlined />}
-      <div style={{ marginTop: 8 }}>上传</div>
+      <PlusOutlined />
+      <div style={{ marginTop: 8 }}>上传图片</div>
     </div>
   );
 
@@ -169,25 +208,24 @@ function PublishItem({ user }) {
 
           <Form.Item
             label="商品图片"
+            name="images"
+            valuePropName="fileList"
+            getValueFromEvent={(e) => {
+              if (Array.isArray(e)) {
+                return e;
+              }
+              return e?.fileList;
+            }}
             rules={[{ required: true, message: '请至少上传一张商品图片!' }]}
           >
             <Upload
               listType="picture-card"
               fileList={fileList}
-              beforeUpload={beforeUpload}
-              onChange={handleImageChange}
-              onRemove={(file) => {
-                const index = fileList.indexOf(file);
-                const newFileList = fileList.slice();
-                newFileList.splice(index, 1);
-                setFileList(newFileList);
-              }}
-              beforeUpload={() => false}
-              customRequest={({ file, onSuccess }) => {
-                setTimeout(() => {
-                  onSuccess('ok');
-                }, 0);
-              }}
+              onChange={handleUploadChange}
+              customRequest={customUpload}
+              multiple
+              maxCount={5}
+              accept="image/*"
             >
               {fileList.length >= 5 ? null : uploadButton}
             </Upload>
